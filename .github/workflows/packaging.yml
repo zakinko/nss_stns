@@ -1,8 +1,9 @@
 name: Packaging
 
-# Builds the pkgsrc package for real, rather than only checking its packing
-# list against a staged install the way the main CI does.  It needs a whole
-# pkgsrc tree in the VM, so it runs on request rather than on every push.
+# Builds the pkgsrc package and the FreeBSD port for real, rather than
+# only checking the packing lists against a staged install the way the main CI
+# does.  It needs a whole package collection in each VM, so it runs on its own
+# schedule, on request, rather than on every push.
 on:
   workflow_dispatch:
 
@@ -66,3 +67,121 @@ jobs:
             echo "== deinstall must take the symlink with it =="
             make deinstall
             test ! -e /usr/lib/nss_stns.so.0
+
+  ports:
+    name: ports (FreeBSD)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the FreeBSD port
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y git curl
+          run: |
+            set -e
+            VERSION=0.1.0
+            WORK=$(pwd)
+
+            echo "== fetching the ports tree =="
+            git clone --depth 1 --single-branch \
+              https://git.FreeBSD.org/ports.git /usr/ports
+
+            echo "== dropping the port in =="
+            mkdir -p /usr/ports/net/nss_stns
+            cp "$WORK"/pkg/ports/net/nss_stns/* /usr/ports/net/nss_stns/
+
+            # USE_GITHUB would fetch a release tarball; seed one from the tree
+            # under test instead, named the way the framework expects.
+            mkdir -p /usr/ports/distfiles /tmp/dist/nss_stns-$VERSION
+            (cd "$WORK" && tar --exclude .git -cf - .) |
+              (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
+            tar -C /tmp/dist -czf \
+              /usr/ports/distfiles/zakinko-nss_stns-v${VERSION}_GH0.tar.gz \
+              nss_stns-$VERSION
+
+            cd /usr/ports/net/nss_stns
+            make makesum
+            echo "== stage and check the packing list =="
+            make stage
+            make check-plist
+            echo "== package and install =="
+            make package
+
+            # zstd is what pkg(8) packages with by default.  A package that
+            # had quietly fallen back to another format would look exactly
+            # like one that had not, so read the magic number and be sure.
+            #
+            # Find the package rather than predicting where it went: PKGFILE
+            # names a path the build does not necessarily leave one at.
+            pkgfile=$(find "$(make -V WRKDIR)" /usr/ports/packages \
+                -name 'nss_stns-*.pkg' -type f 2>/dev/null | head -1)
+            test -n "$pkgfile" || { echo "no package was built" >&2; exit 1; }
+            ls -l "$pkgfile"
+            magic=$(dd if="$pkgfile" bs=1 count=4 2>/dev/null | od -An -tx1 | tr -d ' \n')
+            echo "  magic: $magic"
+            test "$magic" = "28b52ffd"
+
+            make install
+            echo "== the module must be where libc will look for it =="
+            ls -l /usr/local/lib/nss_stns.so.1 /usr/lib/nss_stns.so.1
+            test -h /usr/lib/nss_stns.so.1
+            test "$(readlink /usr/lib/nss_stns.so.1)" = /usr/local/lib/nss_stns.so.1
+            echo "== deinstall must take the symlink with it =="
+            make deinstall
+            test ! -e /usr/lib/nss_stns.so.1
+
+  pkgsrc-bootstrap:
+    name: pkgsrc bootstrapped (FreeBSD)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap pkgsrc and build the package
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y curl
+          run: |
+            set -e
+            VERSION=0.1.0
+            WORK=$(pwd)
+            df -h /
+
+            echo "== fetching pkgsrc =="
+            fetch -o /tmp/pkgsrc.tar.gz \
+              https://cdn.NetBSD.org/pub/pkgsrc/current/pkgsrc.tar.gz
+            tar -C /usr -xzf /tmp/pkgsrc.tar.gz
+            rm -f /tmp/pkgsrc.tar.gz
+
+            echo "== bootstrapping =="
+            cd /usr/pkgsrc/bootstrap
+            ./bootstrap --workdir /tmp/bootstrap
+            export PATH=/usr/pkg/bin:/usr/pkg/sbin:$PATH
+
+            echo "== dropping the package in =="
+            mkdir -p /usr/pkgsrc/security/nss_stns
+            cp "$WORK"/pkg/pkgsrc/security/nss_stns/* /usr/pkgsrc/security/nss_stns/
+
+            mkdir -p /usr/pkgsrc/distfiles /tmp/dist/nss_stns-$VERSION
+            (cd "$WORK" && tar --exclude .git -cf - .) |
+              (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
+            tar -C /tmp/dist -czf \
+              /usr/pkgsrc/distfiles/nss_stns-$VERSION.tar.gz nss_stns-$VERSION
+
+            cd /usr/pkgsrc/security/nss_stns
+            bmake makesum
+
+            echo "== the package must agree with the platform on the version =="
+            bmake show-var VARNAME=NSS_VERSION
+            test "$(bmake show-var VARNAME=NSS_VERSION)" = 1
+
+            echo "== build, package, install =="
+            bmake package
+            bmake install
+            ls -l /usr/pkg/lib/nss_stns.so.1 /usr/lib/nss_stns.so.1
+            test -h /usr/lib/nss_stns.so.1
+            test "$(readlink /usr/lib/nss_stns.so.1)" = /usr/pkg/lib/nss_stns.so.1
+            bmake deinstall
+            test ! -e /usr/lib/nss_stns.so.1

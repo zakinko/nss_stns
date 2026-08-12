@@ -12,13 +12,17 @@ collection, so putting it in place is a plain `cp -R`.
 | Collection | Directory | Category |
 | --- | --- | --- |
 | pkgsrc (NetBSD) | [`pkgsrc/security/nss_stns`](pkgsrc/security/nss_stns) | `security`, beside `nss-pam-ldapd` |
+| ports (FreeBSD) | [`ports/net/nss_stns`](ports/net/nss_stns) | `net`, beside `nss-pam-ldapd` and `nss_ldap` |
 
-pkgsrc keeps its directory clients under `security`.
+The categories differ because the collections themselves differ: pkgsrc keeps
+directory clients under `security`, the ports tree under `net`.
 
 ## pkgsrc
 
-`ONLY_FOR_PLATFORM` keeps the package from being tried where there is no
-nsswitch module interface at all, which is most of where pkgsrc bootstraps.
+pkgsrc is not only NetBSD's — it bootstraps on FreeBSD too, and there the
+module is `nss_stns.so.1`. The package works that out from `OPSYS`, so one
+package directory serves both; `ONLY_FOR_PLATFORM` keeps it from being tried
+where there is no nsswitch module interface at all.
 
 ```sh
 cp -R pkg/pkgsrc/security/nss_stns /usr/pkgsrc/security/
@@ -48,9 +52,34 @@ And to undo it:
 make deinstall
 ```
 
+## ports
+
+```sh
+cp -R pkg/ports/net/nss_stns /usr/ports/net/
+cd /usr/ports/net/nss_stns
+
+make makesum          # fetch the release tarball and write distinfo
+make install clean
+```
+
+Before sending it anywhere, stage it and let the framework check the packing
+list against what was really installed:
+
+```sh
+make stage
+make check-plist
+make package
+```
+
+And to undo it:
+
+```sh
+make deinstall
+```
+
 ## Building from a checkout instead of a release
 
-The package fetches a release tarball from GitHub. To build the working tree
+Every package fetches a release tarball from GitHub. To build the working tree
 instead, hand the framework a tarball made from it, named the way the
 framework expects:
 
@@ -61,6 +90,10 @@ tar --exclude .git -cf - . | (cd /tmp/dist/nss_stns-$V && tar -xf -)
 
 # pkgsrc
 tar -C /tmp/dist -czf /usr/pkgsrc/distfiles/nss_stns-$V.tar.gz nss_stns-$V
+
+# ports
+tar -C /tmp/dist -czf \
+    /usr/ports/distfiles/zakinko-nss_stns-v${V}_GH0.tar.gz nss_stns-$V
 ```
 
 Then `make makesum` in the package directory picks up the tarball that is
@@ -71,14 +104,16 @@ Note that a tarball made this way carries the `$SNOWRABBIT$` ident line in
 `stns.conf.example` unexpanded, because `tar` is not `git archive`. Use
 `git archive --prefix=nss_stns-$V/ -o <file> HEAD` if that matters.
 
-## The one thing the package has to do by hand
+## The one thing every package has to do by hand
 
 `make install` normally symlinks the module into `/usr/lib`, because libc
-calls `dlopen("nss_stns.so.0")` with a bare name and the run-time
+calls `dlopen("nss_stns.so.<version>")` with a bare name and the run-time
 linker restricts a set-user-ID program to `/lib` and `/usr/lib`. Without the
 symlink, `su(1)` and `login(1)` silently fail to resolve STNS accounts.
 
-That path is outside `PREFIX`, which pkgsrc will not stage. The package
-therefore builds with `NSSLIBDIR=${PREFIX}/lib` to suppress the symlink and
-creates it from its `INSTALL` script instead, removing it again from
-`DEINSTALL`.
+That path is outside `PREFIX`, which no package manager will stage. Every
+package therefore builds with `NSSLIBDIR=${PREFIX}/lib` to suppress the
+symlink and creates it from its own hooks instead:
+
+- pkgsrc: the `INSTALL` and `DEINSTALL` scripts
+- ports: `@postexec` and `@postunexec` in `pkg-plist`

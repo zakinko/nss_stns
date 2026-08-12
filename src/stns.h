@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2026 zakinko
  *
- * nss_stns - STNS name service switch module for NetBSD.
+ * nss_stns - STNS name service switch module for NetBSD and FreeBSD.
  *
  * Portions are derived from libnss (https://github.com/STNS/libnss),
  * Copyright (c) 2026 pyama86, distributed under the MIT license.
@@ -31,25 +31,37 @@
 #include "toml.h"
 
 /*
- * This is the nsswitch(5) module interface NetBSD designed: libc dlopen()s
- * nss_<source>.so.<NSS_MODULE_INTERFACE_VERSION> and calls the
- * nss_module_register() it finds there.
+ * Which flavour of the nsswitch module interface we are building against.
+ *
+ * NetBSD designed this interface; FreeBSD imported it and changed the shape of
+ * the dispatch arguments, bumped NSS_MODULE_INTERFACE_VERSION from 0 to 1 and
+ * redefined NS_RETURN from a source action into a status bit.  FreeBSD
+ * derivatives such as MidnightBSD, GhostBSD and HardenedBSD define
+ * __FreeBSD__ and need nothing further.
  */
-#if !defined(__NetBSD__)
-#error "nss_stns is a NetBSD nsswitch module"
-#endif
+#if defined(__NetBSD__)
 #define STNS_NSS_NETBSD 1
+#elif defined(__FreeBSD__)
+#define STNS_NSS_FREEBSD 1
+#else
+#error "nss_stns supports NetBSD and FreeBSD only"
+#endif
 
 #define STNS_VERSION "0.1.0"
 #define STNS_USER_AGENT "nss_stns/" STNS_VERSION
 
 /*
  * Where the client configuration lives.  STNS_CONFDIR is overridable at build
- * time; the Makefile points it at pkgsrc's LOCALBASE, /usr/pkg.  /etc/stns/client/stns.conf is honoured as a fallback so that a
+ * time; the Makefile points it at LOCALBASE (/usr/pkg on NetBSD, /usr/local on
+ * FreeBSD).  /etc/stns/client/stns.conf is honoured as a fallback so that a
  * configuration copied verbatim from a Linux host keeps working.
  */
 #ifndef STNS_CONFDIR
+#ifdef __NetBSD__
 #define STNS_CONFDIR "/usr/pkg/etc"
+#else
+#define STNS_CONFDIR "/usr/local/etc"
+#endif
 #endif
 
 /*
@@ -69,12 +81,17 @@
 #define STNS_DEFAULT_API_ENDPOINT "http://localhost:1104/v1"
 
 /*
- * Where cached responses go by default.  NetBSD's hier(7) has no /var/cache;
- * automatically generated data belongs under /var/db.  An explicit cache_dir
- * in stns.conf always wins, so a configuration copied from a Linux host still
- * lands where it says it does.
+ * Where cached responses go by default.  hier(7) differs: FreeBSD documents
+ * /var/cache for "miscellaneous cached files", while NetBSD has no such
+ * directory and keeps automatically generated data under /var/db.  An explicit
+ * cache_dir in stns.conf always wins, so a configuration copied from a Linux
+ * host still lands where it says it does.
  */
+#ifdef STNS_NSS_NETBSD
 #define STNS_DEFAULT_CACHE_DIR "/var/db/stns"
+#else
+#define STNS_DEFAULT_CACHE_DIR "/var/cache/stns"
+#endif
 #define STNS_DEFAULT_CACHED_SOCKET "/var/run/cache-stnsd.sock"
 #define STNS_DEFAULT_SHELL "/bin/sh"
 #define STNS_DEFAULT_HOME_PREFIX "/home"
@@ -97,11 +114,11 @@
 /*
  * "The caller's buffer was too small", as returned by the lookup layer.
  *
- * This deliberately is not an NS_* constant.  On NetBSD, NS_RETURN is a source
- * action rather than a status, and its value collides with NS_SUCCESS, so
- * "buffer too small" is reported the way NetBSD's own backends report it:
- * *retval = ERANGE and NS_UNAVAIL.  The glue in nss_stns.c does that
- * translation.
+ * This deliberately is not an NS_* constant.  NS_RETURN means two different
+ * things on the two platforms: on FreeBSD it is a status bit meaning "stop
+ * searching", while on NetBSD it is a source action whose value collides with
+ * NS_SUCCESS.  Each OS glue translates this sentinel itself - NetBSD reports
+ * it the way its own backends do, with *retval = ERANGE and NS_UNAVAIL.
  */
 #define STNS_NS_ERANGE (-1)
 

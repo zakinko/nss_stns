@@ -15,10 +15,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#if !defined(__NetBSD__)
+#if defined(__NetBSD__)
+#define EXPECT_NETBSD 1
+#elif defined(__FreeBSD__)
+#define EXPECT_FREEBSD 1
+#else
 #error "unsupported platform"
 #endif
-#define EXPECT_NETBSD 1
 
 struct expected {
 	const char *database;

@@ -2,28 +2,35 @@
 
 [日本語](README.ja.md)
 
-An [STNS](https://stns.jp) name service switch module for **NetBSD**.
+An [STNS](https://stns.jp) name service switch module for **NetBSD** and
+**FreeBSD**.
 
 STNS's own client, [STNS/libnss](https://github.com/STNS/libnss), targets glibc's
-NSS. This is a separate implementation against the `nsswitch(5)` module
-interface NetBSD designed, so that `getpwnam(3)`, `getgrnam(3)`,
-`getgrouplist(3)` and friends resolve users and groups from an STNS API
-server.
+NSS. This is a separate implementation against the BSD `nsswitch(5)` module
+interface, so that `getpwnam(3)`, `getgrnam(3)`, `getgrouplist(3)` and friends
+resolve users and groups from an STNS API server.
+
+NetBSD is the reference platform — it designed this interface, and it has the
+larger surface, dispatching the non-reentrant entry points as well as the `_r`
+ones. FreeBSD is an adaptation of what works there.
 
 The client configuration file is the same `stns.conf` you already use on Linux.
 
 ## Status
 
-- passwd lookups by name, by uid and by enumeration
-- group lookups by name, by gid and by enumeration
-- supplementary groups, through `getgroupmembership`
-- the non-reentrant `getpwnam(3)` and `getgrnam(3)` entry points as well as
-  the `_r` ones, both of which NetBSD dispatches
-- `stns-key-wrapper` for `sshd_config`'s `AuthorizedKeysCommand`
-- `cache-stnsd`'s unix socket
+| | NetBSD | FreeBSD |
+| --- | --- | --- |
+| passwd lookups (name / uid / enumeration) | yes | yes |
+| group lookups (name / gid / enumeration) | yes | yes |
+| supplementary groups (`getgroupmembership`) | yes | yes |
+| non-reentrant `getpwnam(3)` / `getgrnam(3)` | yes | n/a |
+| `stns-key-wrapper` for `AuthorizedKeysCommand` | yes | yes |
+| `cache-stnsd` unix socket | yes | yes |
+| CI | yes | yes |
 
-FreeBSD and DragonFly BSD inherited this same module interface and would be a
-small step from here.
+FreeBSD derivatives such as MidnightBSD, GhostBSD and HardenedBSD define
+`__FreeBSD__` and build from the same branch. DragonFly BSD's libc descends
+from FreeBSD's and should be close to a drop-in, but it is untested here.
 
 OpenBSD and macOS are out of scope: neither has an nsswitch module interface at
 all. OpenBSD's only pluggable directory source is YP, which is why its base
@@ -35,31 +42,38 @@ daemon, not a port of this module.
 Requires libcurl and BSD make.
 
 ```sh
+# NetBSD
 pkgin install curl
 make
 make install          # PREFIX defaults to /usr/pkg
+
+# FreeBSD
+pkg install curl
+make
+make install          # PREFIX defaults to /usr/local
 ```
 
 `make install` places:
 
-| File | Path |
-| --- | --- |
-| module | `/usr/pkg/lib/nss_stns.so.0` |
-| module symlink | `/usr/lib/nss_stns.so.0` |
-| key wrapper | `/usr/pkg/bin/stns-key-wrapper` |
-| sample config | `/usr/pkg/share/examples/nss_stns/stns.conf` |
+| File | NetBSD | FreeBSD |
+| --- | --- | --- |
+| module | `/usr/pkg/lib/nss_stns.so.0` | `/usr/local/lib/nss_stns.so.1` |
+| module symlink | `/usr/lib/nss_stns.so.0` | `/usr/lib/nss_stns.so.1` |
+| key wrapper | `/usr/pkg/bin/stns-key-wrapper` | `/usr/local/bin/stns-key-wrapper` |
+| sample config | `/usr/pkg/share/examples/nss_stns/stns.conf` | `/usr/local/share/examples/nss_stns/stns.conf` |
 
 Two details about that layout are worth knowing.
 
 **Why the `/usr/lib` symlink.** libc loads the module with
-`dlopen("nss_stns.so.0")` — a bare name, no path. For a set-user-ID
+`dlopen("nss_stns.so.<version>")` — a bare name, no path. For a set-user-ID
 program the runtime linker only searches the trusted directories, `/lib` and
 `/usr/lib`, so a module living only under `LOCALBASE` would silently fail to
 load for `su(1)`, `login(1)` and anything else that runs privileged. The
 symlink is what makes those work.
 
-**Why the `.0` suffix.** The file name ends in
-`NSS_MODULE_INTERFACE_VERSION`, which is `0` here.
+**Why the version suffix differs.** The file name ends in
+`NSS_MODULE_INTERFACE_VERSION`, which is `0` on NetBSD and `1` on FreeBSD. The
+`Makefile` picks the right one from `uname -s`.
 
 Override the paths as usual:
 
@@ -67,16 +81,17 @@ Override the paths as usual:
 make PREFIX=/opt/stns SYSCONFDIR=/etc install
 ```
 
-The pkgsrc package is in [`pkg/`](pkg/), with the commands for dropping it
-into `/usr/pkgsrc` and building it there.
+Packages for pkgsrc and the ports tree are in [`pkg/`](pkg/), with the
+commands for dropping them into `/usr/pkgsrc` and `/usr/ports` and building
+them there.
 
 ## Configuration
 
 ### nsswitch.conf
 
 This one is not ours to place: it belongs to the base system and its location
-is fixed as `_PATH_NS_CONF` in `<nsswitch.h>`, so it stays in `/etc` regardless
-of where the package itself was installed. Add
+is fixed as `_PATH_NS_CONF` in `<nsswitch.h>`, so it stays in `/etc` on both
+systems regardless of where the package itself was installed. Add
 `stns` after `files`:
 
 ```text
@@ -95,8 +110,8 @@ the machine stays usable when the API server is unreachable.
 
 The config file is read from the first of these that exists:
 
-1. `${SYSCONFDIR}/stns/client/stns.conf` — `/usr/pkg/etc/stns/client/stns.conf`
-   by default, that being pkgsrc's `PKG_SYSCONFDIR`
+1. `${SYSCONFDIR}/stns/client/stns.conf` — `/usr/pkg/etc/...` on NetBSD (pkgsrc's
+   `PKG_SYSCONFDIR`), `/usr/local/etc/...` on FreeBSD
 2. `/etc/stns/client/stns.conf`
 
 Both keep upstream STNS's `stns/client/` subtree rather than flattening to a
@@ -127,7 +142,7 @@ See [`stns.conf.example`](stns.conf.example) for every supported key.
 
 ### Passwords
 
-There is no `/etc/shadow` here, so the module does what the `files` backend
+There is no `/etc/shadow` on a BSD, so the module does what the `files` backend
 does: the `password` hash from the API is returned in `pw_passwd` only when the
 caller's effective uid is 0, and everyone else sees `*`. That is enough for
 `pam_unix(8)` to authenticate STNS users, with no shadow database involved.
@@ -164,8 +179,8 @@ handling matters more than throughput.
   path. Each user gets a private directory and the module refuses to read or
   overwrite a file it does not own. A 404 is remembered too, as a zero length
   file with its own shorter `negative_cache_ttl`. `cache_dir` defaults to
-  `/var/db/stns`, `hier(7)` having no `/var/cache` and keeping automatically
-  generated data under `/var/db`.
+  `/var/db/stns` on NetBSD and `/var/cache/stns` on FreeBSD, because `hier(7)`
+  documents `/var/cache` on the latter and nothing of the sort on the former.
 - **A connection failure trips a circuit breaker** for `request_locktime`
   seconds, so an unreachable server costs one timeout rather than one per
   lookup. The breaker file lives in the caller's own cache directory rather
@@ -251,8 +266,9 @@ equivalent of the CVS import tag NetBSD would use for this, so it is written
 down. A checksum mismatch means somebody edited a bundled copy in place, which
 defeats the point of recording a revision at all.
 
-CI runs all of it on NetBSD, on every push and once a week — the VM image and
-its package set drift underneath us, and a scheduled build is what notices. A separate weekly job additionally asks
+CI runs all of it on NetBSD and FreeBSD, on every push and once a week — the
+VM images and their package sets drift underneath us, and a scheduled build is
+what notices. A separate weekly job additionally asks
 GitHub whether the revisions in the manifest are still upstream's current
 ones, and whether upstream at those revisions still matches what is bundled,
 byte for byte. Without it a bundled parser can go years out of date without

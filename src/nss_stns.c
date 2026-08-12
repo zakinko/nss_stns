@@ -3,16 +3,22 @@
  *
  * Copyright (c) 2026 zakinko
  *
- * nsswitch(5) glue.
+ * nsswitch(5) glue.  NetBSD invented this module interface and FreeBSD
+ * inherited it, so the two are close but not identical:
  *
- * libc hands each method its arguments through a va_list whose shape depends
- * on the method, and expects an NS_* status back.  NetBSD passes the result
- * through the first variadic argument and leaves nsdispatch(3)'s own retval
- * unused, and it dispatches the non-reentrant getpwnam()/getgrnam()/... entry
- * points as well as the _r ones, so those need storage owned by the module.
+ *	- NSS_MODULE_INTERFACE_VERSION is 0 on NetBSD and 1 on FreeBSD, which
+ *	  is what decides whether libc dlopen()s nss_stns.so.0 or .so.1.
+ *	- NetBSD passes the result through the first variadic argument and
+ *	  leaves nsdispatch(3)'s own retval unused; FreeBSD does the opposite
+ *	  and puts an int *errnop last instead.
+ *	- NetBSD also dispatches the non-reentrant getpwnam()/getgrnam()/...
+ *	  entry points, which need module owned storage, and has
+ *	  setpassent()/setgroupent() on top of setpwent()/setgrent().
+ *	- struct passwd carries pw_fields on FreeBSD only.
+ *	- NS_RETURN is a status bit on FreeBSD but a source action on NetBSD,
+ *	  where its value collides with NS_SUCCESS; see STNS_NS_ERANGE.
  *
- * Everything below the argument unpacking is shared with the rest of the
- * module and knows nothing about any of this.
+ * Everything below the argument unpacking is shared.
  */
 #include <errno.h>
 
@@ -82,6 +88,8 @@ gr_dispatch(enum stns_how how, const char *name, gid_t gid, struct group *grp, c
 	stns_unload_config(&c);
 	return rv;
 }
+
+#ifdef STNS_NSS_NETBSD
 
 /*
  * Storage for the non-reentrant entry points.  libc holds its own passwd and
@@ -442,6 +450,191 @@ static ns_mtab stns_methods[] = {
 	{ NSDB_GROUP, "endgrent", stns_endgrent, NULL },
 	{ NSDB_GROUP, "getgroupmembership", stns_getgroupmembership, NULL },
 };
+
+#endif /* STNS_NSS_NETBSD */
+
+#ifdef STNS_NSS_FREEBSD
+
+/* ARGSUSED */
+static int
+stns_getpwnam_r(void *retval, void *mdata, va_list ap)
+{
+	struct passwd **result = retval;
+	const char *name = va_arg(ap, const char *);
+	struct passwd *pwd = va_arg(ap, struct passwd *);
+	char *buf = va_arg(ap, char *);
+	size_t buflen = va_arg(ap, size_t);
+	int *errnop = va_arg(ap, int *);
+	int rv;
+
+	rv = pw_dispatch(STNS_BY_NAME, name, 0, pwd, buf, buflen, errnop);
+	if (rv == STNS_NS_ERANGE)
+		return NS_RETURN;
+	if (rv == NS_SUCCESS)
+		*result = pwd;
+	return rv;
+}
+
+/* ARGSUSED */
+static int
+stns_getpwuid_r(void *retval, void *mdata, va_list ap)
+{
+	struct passwd **result = retval;
+	uid_t uid = va_arg(ap, uid_t);
+	struct passwd *pwd = va_arg(ap, struct passwd *);
+	char *buf = va_arg(ap, char *);
+	size_t buflen = va_arg(ap, size_t);
+	int *errnop = va_arg(ap, int *);
+	int rv;
+
+	rv = pw_dispatch(STNS_BY_ID, NULL, uid, pwd, buf, buflen, errnop);
+	if (rv == STNS_NS_ERANGE)
+		return NS_RETURN;
+	if (rv == NS_SUCCESS)
+		*result = pwd;
+	return rv;
+}
+
+/* ARGSUSED */
+static int
+stns_getpwent_r(void *retval, void *mdata, va_list ap)
+{
+	struct passwd **result = retval;
+	struct passwd *pwd = va_arg(ap, struct passwd *);
+	char *buf = va_arg(ap, char *);
+	size_t buflen = va_arg(ap, size_t);
+	int *errnop = va_arg(ap, int *);
+	int rv;
+
+	rv = pw_dispatch(STNS_NEXT, NULL, 0, pwd, buf, buflen, errnop);
+	if (rv == STNS_NS_ERANGE)
+		return NS_RETURN;
+	if (rv == NS_SUCCESS)
+		*result = pwd;
+	return rv;
+}
+
+/* ARGSUSED */
+static int
+stns_setpwent(void *retval, void *mdata, va_list ap)
+{
+	return stns_pw_setent();
+}
+
+/* ARGSUSED */
+static int
+stns_endpwent(void *retval, void *mdata, va_list ap)
+{
+	return stns_pw_endent();
+}
+
+/* ARGSUSED */
+static int
+stns_getgrnam_r(void *retval, void *mdata, va_list ap)
+{
+	struct group **result = retval;
+	const char *name = va_arg(ap, const char *);
+	struct group *grp = va_arg(ap, struct group *);
+	char *buf = va_arg(ap, char *);
+	size_t buflen = va_arg(ap, size_t);
+	int *errnop = va_arg(ap, int *);
+	int rv;
+
+	rv = gr_dispatch(STNS_BY_NAME, name, 0, grp, buf, buflen, errnop);
+	if (rv == STNS_NS_ERANGE)
+		return NS_RETURN;
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+/* ARGSUSED */
+static int
+stns_getgrgid_r(void *retval, void *mdata, va_list ap)
+{
+	struct group **result = retval;
+	gid_t gid = va_arg(ap, gid_t);
+	struct group *grp = va_arg(ap, struct group *);
+	char *buf = va_arg(ap, char *);
+	size_t buflen = va_arg(ap, size_t);
+	int *errnop = va_arg(ap, int *);
+	int rv;
+
+	rv = gr_dispatch(STNS_BY_ID, NULL, gid, grp, buf, buflen, errnop);
+	if (rv == STNS_NS_ERANGE)
+		return NS_RETURN;
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+/* ARGSUSED */
+static int
+stns_getgrent_r(void *retval, void *mdata, va_list ap)
+{
+	struct group **result = retval;
+	struct group *grp = va_arg(ap, struct group *);
+	char *buf = va_arg(ap, char *);
+	size_t buflen = va_arg(ap, size_t);
+	int *errnop = va_arg(ap, int *);
+	int rv;
+
+	rv = gr_dispatch(STNS_NEXT, NULL, 0, grp, buf, buflen, errnop);
+	if (rv == STNS_NS_ERANGE)
+		return NS_RETURN;
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+/* ARGSUSED */
+static int
+stns_setgrent(void *retval, void *mdata, va_list ap)
+{
+	return stns_gr_setent();
+}
+
+/* ARGSUSED */
+static int
+stns_endgrent(void *retval, void *mdata, va_list ap)
+{
+	return stns_gr_endent();
+}
+
+/* ARGSUSED */
+static int
+stns_getgroupmembership(void *retval, void *mdata, va_list ap)
+{
+	const char *uname = va_arg(ap, const char *);
+	gid_t agroup = va_arg(ap, gid_t);
+	gid_t *groups = va_arg(ap, gid_t *);
+	int maxgrp = va_arg(ap, int);
+	int *groupc = va_arg(ap, int *);
+	stns_conf_t c;
+	int rv;
+
+	if (stns_load_config(stns_config_path(), &c) != STNS_OK)
+		return NS_UNAVAIL;
+	rv = stns_gr_membership(&c, uname, agroup, groups, maxgrp, groupc);
+	stns_unload_config(&c);
+	return rv;
+}
+
+static ns_mtab stns_methods[] = {
+	{ NSDB_PASSWD, "getpwnam_r", stns_getpwnam_r, NULL },
+	{ NSDB_PASSWD, "getpwuid_r", stns_getpwuid_r, NULL },
+	{ NSDB_PASSWD, "getpwent_r", stns_getpwent_r, NULL },
+	{ NSDB_PASSWD, "setpwent", stns_setpwent, NULL },
+	{ NSDB_PASSWD, "endpwent", stns_endpwent, NULL },
+	{ NSDB_GROUP, "getgrnam_r", stns_getgrnam_r, NULL },
+	{ NSDB_GROUP, "getgrgid_r", stns_getgrgid_r, NULL },
+	{ NSDB_GROUP, "getgrent_r", stns_getgrent_r, NULL },
+	{ NSDB_GROUP, "setgrent", stns_setgrent, NULL },
+	{ NSDB_GROUP, "endgrent", stns_endgrent, NULL },
+	{ NSDB_GROUP, "getgroupmembership", stns_getgroupmembership, NULL },
+};
+
+#endif /* STNS_NSS_FREEBSD */
 
 /*
  * The one symbol libc looks up with dlsym(3).  Everything else is hidden by

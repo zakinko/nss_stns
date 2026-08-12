@@ -139,6 +139,9 @@ stns_fill_passwd(JSON_Object *o, stns_conf_t *c, struct passwd *pwd, char *buf, 
 		return STNS_NS_ERANGE;
 	}
 
+#ifdef STNS_NSS_FREEBSD
+	pwd->pw_fields = _PWF_NAME | _PWF_PASSWD | _PWF_UID | _PWF_GID | _PWF_CLASS | _PWF_GECOS | _PWF_DIR | _PWF_SHELL;
+#endif
 	return NS_SUCCESS;
 }
 

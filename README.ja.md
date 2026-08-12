@@ -2,22 +2,27 @@
 
 [English](README.md)
 
-**NetBSD** 向けの [STNS](https://stns.jp) ネームサービススイッチモジュールです。
+**NetBSD** と **FreeBSD** 向けの [STNS](https://stns.jp) ネームサービススイッチモジュールです。
 
-STNS 公式のクライアント [STNS/libnss](https://github.com/STNS/libnss) は glibc の NSS 向けです。本実装は NetBSD が設計した `nsswitch(5)` モジュールインターフェースに対する別実装で、`getpwnam(3)`、`getgrnam(3)`、`getgrouplist(3)` などが STNS API サーバー上のユーザーとグループを解決するようにします。
+STNS 公式のクライアント [STNS/libnss](https://github.com/STNS/libnss) は glibc の NSS 向けです。本実装は BSD の `nsswitch(5)` モジュールインターフェースに対する別実装で、`getpwnam(3)`、`getgrnam(3)`、`getgrouplist(3)` などが STNS API サーバー上のユーザーとグループを解決するようにします。
+
+NetBSD が基準プラットフォームです。このインターフェースを設計したのが NetBSD であり、`_r` 版に加えて非リエントラント版もディスパッチするぶん対応範囲も広いためです。FreeBSD はそこで動くものを適応させたものです。
 
 設定ファイルは Linux で使っているものと同じ `stns.conf` です。
 
 ## 対応状況
 
-- passwd の解決 (名前 / uid / 列挙)
-- group の解決 (名前 / gid / 列挙)
-- 補助グループ (`getgroupmembership` 経由)
-- NetBSD がディスパッチする非リエントラント版 `getpwnam(3)`、`getgrnam(3)` と `_r` 版の両方
-- `sshd_config` の `AuthorizedKeysCommand` 用 `stns-key-wrapper`
-- `cache-stnsd` の unix ソケット
+| | NetBSD | FreeBSD |
+| --- | --- | --- |
+| passwd の解決 (名前 / uid / 列挙) | ○ | ○ |
+| group の解決 (名前 / gid / 列挙) | ○ | ○ |
+| 補助グループ (`getgroupmembership`) | ○ | ○ |
+| 非リエントラント版 `getpwnam(3)` / `getgrnam(3)` | ○ | 該当なし |
+| `AuthorizedKeysCommand` 用 `stns-key-wrapper` | ○ | ○ |
+| `cache-stnsd` の unix ソケット | ○ | ○ |
+| CI | ○ | ○ |
 
-FreeBSD と DragonFly BSD は同じモジュールインターフェースを引き継いでおり、ここからは小さな一歩です。
+MidnightBSD、GhostBSD、HardenedBSD といった FreeBSD 派生は `__FreeBSD__` を定義するため、同じ分岐でビルドされます。DragonFly BSD の libc は FreeBSD 由来なのでほぼそのまま動くはずですが、ここでは未検証です。
 
 OpenBSD と macOS は対象外です。どちらも nsswitch のモジュールインターフェース自体を持ちません。OpenBSD で差し込めるディレクトリソースは YP だけで、base に `ypldap(8)` があるのはそのためです。macOS は Open Directory を使います。どちらかに対応するとなれば、このモジュールの移植ではなくデーモンを書く話になります。
 
@@ -26,25 +31,31 @@ OpenBSD と macOS は対象外です。どちらも nsswitch のモジュール�
 libcurl と BSD make が必要です。
 
 ```sh
+# NetBSD
 pkgin install curl
 make
 make install          # PREFIX の既定値は /usr/pkg
+
+# FreeBSD
+pkg install curl
+make
+make install          # PREFIX の既定値は /usr/local
 ```
 
 `make install` が置くもの:
 
-| ファイル | パス |
-| --- | --- |
-| モジュール | `/usr/pkg/lib/nss_stns.so.0` |
-| モジュールの symlink | `/usr/lib/nss_stns.so.0` |
-| key wrapper | `/usr/pkg/bin/stns-key-wrapper` |
-| 設定サンプル | `/usr/pkg/share/examples/nss_stns/stns.conf` |
+| ファイル | NetBSD | FreeBSD |
+| --- | --- | --- |
+| モジュール | `/usr/pkg/lib/nss_stns.so.0` | `/usr/local/lib/nss_stns.so.1` |
+| モジュールの symlink | `/usr/lib/nss_stns.so.0` | `/usr/lib/nss_stns.so.1` |
+| key wrapper | `/usr/pkg/bin/stns-key-wrapper` | `/usr/local/bin/stns-key-wrapper` |
+| 設定サンプル | `/usr/pkg/share/examples/nss_stns/stns.conf` | `/usr/local/share/examples/nss_stns/stns.conf` |
 
 この配置について、知っておく価値のある点が2つあります。
 
-**なぜ `/usr/lib` に symlink するのか。** libc はモジュールを `dlopen("nss_stns.so.0")` と、パスなしのベース名だけで読み込みます。set-user-ID されたプログラムの場合、ランタイムリンカは信頼されたディレクトリ `/lib` と `/usr/lib` しか探索しません。したがって `LOCALBASE` の下にしか存在しないモジュールは、`su(1)` や `login(1)` をはじめ特権で動くものからは黙って読み込みに失敗します。symlink はそれを動かすためのものです。
+**なぜ `/usr/lib` に symlink するのか。** libc はモジュールを `dlopen("nss_stns.so.<version>")` と、パスなしのベース名だけで読み込みます。set-user-ID されたプログラムの場合、ランタイムリンカは信頼されたディレクトリ `/lib` と `/usr/lib` しか探索しません。したがって `LOCALBASE` の下にしか存在しないモジュールは、`su(1)` や `login(1)` をはじめ特権で動くものからは黙って読み込みに失敗します。symlink はそれを動かすためのものです。
 
-**なぜ `.0` が付くのか。** ファイル名の末尾は `NSS_MODULE_INTERFACE_VERSION` で、NetBSD では `0` です。
+**なぜバージョン接尾辞が異なるのか。** ファイル名の末尾は `NSS_MODULE_INTERFACE_VERSION` で、NetBSD では `0`、FreeBSD では `1` です。`Makefile` が `uname -s` から適切なものを選びます。
 
 パスは通常どおり上書きできます:
 
@@ -52,13 +63,13 @@ make install          # PREFIX の既定値は /usr/pkg
 make PREFIX=/opt/stns SYSCONFDIR=/etc install
 ```
 
-pkgsrc 向けのパッケージは [`pkg/`](pkg/) にあります。`/usr/pkgsrc` に配置してビルドするコマンドも書いてあります。
+pkgsrc と ports 向けのパッケージは [`pkg/`](pkg/) にあります。`/usr/pkgsrc` と `/usr/ports` に配置してビルドするコマンドも書いてあります。
 
 ## 設定
 
 ### nsswitch.conf
 
-これは我々が置く場所を決められるファイルではありません。ベースシステムの持ち物であり、パスは `<nsswitch.h>` の `_PATH_NS_CONF` で固定されています。そのため、パッケージ自体をどこにインストールしたかに関わらず `/etc` に置かれます。`files` の後ろに `stns` を足してください:
+これは我々が置く場所を決められるファイルではありません。ベースシステムの持ち物であり、パスは `<nsswitch.h>` の `_PATH_NS_CONF` で固定されています。そのため、パッケージ自体をどこにインストールしたかに関わらず、いずれのシステムでも `/etc` に置かれます。`files` の後ろに `stns` を足してください:
 
 ```text
 passwd: files stns
@@ -73,7 +84,7 @@ group:  files stns
 
 設定ファイルは以下のうち最初に見つかったものが読まれます。
 
-1. `${SYSCONFDIR}/stns/client/stns.conf` — 既定では `/usr/pkg/etc/stns/client/stns.conf`。pkgsrc の `PKG_SYSCONFDIR` です
+1. `${SYSCONFDIR}/stns/client/stns.conf` — NetBSD では `/usr/pkg/etc/...` (pkgsrc の `PKG_SYSCONFDIR`)、FreeBSD では `/usr/local/etc/...`
 2. `/etc/stns/client/stns.conf`
 
 どちらも upstream STNS の `stns/client/` という階層を維持しており、素の `stns.conf` には平坦化していません。`nss-pam-ldapd` のような単一ファイルのモジュールなら平坦な `nslcd.conf` で済みますが、STNS はスイートです。サーバー側の設定が `stns/server/stns.conf` である以上、ここで平坦な名前にすると、これらのシステム向けに STNS サーバーがパッケージされた日に曖昧になります。`sssd` が設定を分けているのも同じ理由です。
@@ -97,7 +108,7 @@ ca = "/usr/pkg/etc/stns/client/ca.pem"
 
 ### パスワード
 
-NetBSD に `/etc/shadow` はありません。そこで本モジュールは `files` バックエンドと同じ振る舞いをします。API から返ってきた `password` のハッシュを `pw_passwd` に入れるのは呼び出し元の実効 uid が 0 のときだけで、それ以外には `*` を返します。これにより、shadow データベースを使わずに `pam_unix(8)` で STNS ユーザーを認証できます。
+BSD に `/etc/shadow` はありません。そこで本モジュールは `files` バックエンドと同じ振る舞いをします。API から返ってきた `password` のハッシュを `pw_passwd` に入れるのは呼び出し元の実効 uid が 0 のときだけで、それ以外には `*` を返します。これにより、shadow データベースを使わずに `pam_unix(8)` で STNS ユーザーを認証できます。
 
 ### SSH 鍵
 
@@ -123,7 +134,7 @@ unix_socket = "/var/run/cache-stnsd.sock"
 
 ネームサービスモジュールはマシン上の全プロセスの中で動きます。したがって、スループットより異常系の扱いが重要です。
 
-- **レスポンスはディスクにキャッシュされます。** 場所は `cache_dir/<euid>/` で、リクエストパスをキーにします。ユーザーごとに専用のディレクトリが割り当てられ、自分が所有していないファイルの読み書きは拒否します。404 も長さ 0 のファイルとして記憶され、こちらは `negative_cache_ttl` という別の短い TTL を持ちます。`cache_dir` の既定値は `/var/db/stns` です。`hier(7)` に `/var/cache` は無く、自動生成されるデータは `/var/db` の下に置くためです。
+- **レスポンスはディスクにキャッシュされます。** 場所は `cache_dir/<euid>/` で、リクエストパスをキーにします。ユーザーごとに専用のディレクトリが割り当てられ、自分が所有していないファイルの読み書きは拒否します。404 も長さ 0 のファイルとして記憶され、こちらは `negative_cache_ttl` という別の短い TTL を持ちます。`cache_dir` の既定値は NetBSD が `/var/db/stns`、FreeBSD が `/var/cache/stns` です。`hier(7)` が `/var/cache` を定めているのは後者だけで、前者には相当するものがないためです。
 - **接続失敗はサーキットブレーカーを落とします。** `request_locktime` の間リクエストを試みなくなるので、到達できないサーバーのコストは「ルックアップごとに1回のタイムアウト」ではなく「1回のタイムアウト」で済みます。ブレーカーのファイルは誰でも書ける場所ではなく呼び出し元自身のキャッシュディレクトリに置かれるため、非特権ユーザーが全体の名前解決を止めることはできません。
 - **API が返す id レンジのヒント** (`User-Highest-Id` など) を使い、サーバーが持ち得ない uid に対するリクエストを省きます。
 - **`stns.conf` の知らないキーは報告されます。** プロセスごとに1回、`LOG_NOTICE` で出します。一方、キーが無いことは報告しません。ほぼすべてが省略可能で既定値が文書化されており、それをルックアップごとに言えば、正常な設定についての報告で syslog が埋まってしまいます。「有るが知らないキー」は話が別です。`api_endpont` と書いてしまった場合、そうでなければモジュールは黙って `localhost` を見に行き、どこにも何も出ないまま全ルックアップが失敗します。`[http_headers]` は設計上キーが自由なので対象外です。
@@ -156,7 +167,7 @@ TLS 経由でも一通り走らせます。生成した CA を使い、各ケー
 
 **`make external`** は `external/` を [`external/MANIFEST`](external/MANIFEST) と突き合わせます。マニフェストには各同梱物の出所と、正確にどの upstream リビジョンなのかが記録してあります。NetBSD なら CVS の import タグが担う役割ですが、git に相当物が無いので書き下しています。チェックサムが合わない場合、誰かが同梱物を直接書き換えたということであり、リビジョンを記録している意味がなくなります。
 
-CI はこれらすべてを NetBSD で、push のたびと週1回実行します。VM イメージとそのパッケージセットは我々の足元で変化するもので、それに気付けるのは定期実行だけです。加えて週1回の別ジョブが、マニフェストのリビジョンが今も upstream の最新かどうか、そしてそのリビジョンの upstream が同梱物とバイト単位で一致するかを GitHub に問い合わせます。これが無いと、同梱パーサが何年も古いまま誰にも気付かれません。
+CI はこれらすべてを NetBSD と FreeBSD で、push のたびと週1回実行します。VM イメージとそのパッケージセットは我々の足元で変化するもので、それに気付けるのは定期実行だけです。加えて週1回の別ジョブが、マニフェストのリビジョンが今も upstream の最新かどうか、そしてそのリビジョンの upstream が同梱物とバイト単位で一致するかを GitHub に問い合わせます。これが無いと、同梱パーサが何年も古いまま誰にも気付かれません。
 
 ## ライセンス
 

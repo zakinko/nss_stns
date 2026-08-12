@@ -1,0 +1,10 @@
+bin/stns-key-wrapper
+lib/nss_stns.so.%%NSS_VERSION%%
+@sample share/examples/nss_stns/stns.conf etc/stns/client/stns.conf
+@dir etc/stns/client
+@dir etc/stns
+@comment libc dlopen()s name service modules by bare soname, and a set-user-ID
+@comment program searches only /lib and /usr/lib, so su(1) and login(1) would
+@comment never see a module that lived only under LOCALBASE.
+@postexec ln -sf %D/lib/nss_stns.so.%%NSS_VERSION%% /usr/lib/nss_stns.so.%%NSS_VERSION%%
+@postunexec rm -f /usr/lib/nss_stns.so.%%NSS_VERSION%%

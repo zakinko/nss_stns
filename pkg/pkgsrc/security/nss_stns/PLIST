@@ -1,4 +1,4 @@
 @comment $NetBSD$
 bin/stns-key-wrapper
-lib/nss_stns.so.0
+lib/nss_stns.so.${NSS_VERSION}
 share/examples/nss_stns/stns.conf

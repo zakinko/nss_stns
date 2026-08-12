@@ -17,9 +17,14 @@ MOCK="$SRCDIR/tests/mock_stns_server.py"
 WORKDIR=${WORKDIR:-/tmp/nss_stns_it}
 
 OS=$(uname -s)
-[ "$OS" = NetBSD ] || { echo "unsupported OS: $OS" >&2; exit 1; }
-LOCALBASE=${LOCALBASE:-/usr/pkg}
-CACHEDIR=${CACHEDIR:-/var/db/stns}
+case "$OS" in
+NetBSD)		LOCALBASE=${LOCALBASE:-/usr/pkg}
+		CACHEDIR=${CACHEDIR:-/var/db/stns} ;;
+FreeBSD|MidnightBSD)
+		LOCALBASE=${LOCALBASE:-/usr/local}
+		CACHEDIR=${CACHEDIR:-/var/cache/stns} ;;
+*)		echo "unsupported OS: $OS" >&2; exit 1 ;;
+esac
 SYSCONFDIR=${SYSCONFDIR:-$LOCALBASE/etc}
 CONFDIR=$SYSCONFDIR/stns/client
 CONF=$CONFDIR/stns.conf
@@ -195,9 +200,11 @@ expect "getent group 1002" \
 	"stnsops:*:1002:stnsuser" \
 	"$(getent group 1002)"
 
+# NetBSD's getent(1) prints the trailing colon for an empty member list and
+# FreeBSD's does not; both are the same group.
 expect "getent group stnsempty (no members)" \
-	"stnsempty:*:1003:" \
-	"$(getent group stnsempty)"
+	"stnsempty:*:1003" \
+	"$(getent group stnsempty | sed 's/:$//')"
 
 echo
 echo "== a large group forces the ERANGE-and-retry path =="

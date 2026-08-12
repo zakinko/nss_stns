@@ -10,7 +10,7 @@
 # out of the arguments and left it in ${STAGE}.  Testing $2 here would compare
 # against nothing at all.
 
-STNS_MODULE="nss_stns.so.0"
+STNS_MODULE="nss_stns.so.@NSS_VERSION@"
 
 case ${STAGE} in
 POST-INSTALL)

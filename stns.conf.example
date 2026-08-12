@@ -7,9 +7,10 @@
 # misspelling does not quietly leave you talking to localhost.
 
 # Install this as ${SYSCONFDIR}/stns/client/stns.conf, which is
-# /usr/pkg/etc/stns/client/stns.conf by default.  /etc/stns/client/stns.conf
-# is read as a fallback, so a file copied verbatim from a Linux host keeps
-# working.
+#   /usr/pkg/etc/stns/client/stns.conf   on NetBSD
+#   /usr/local/etc/stns/client/stns.conf on FreeBSD
+# /etc/stns/client/stns.conf is read as a fallback, so a file copied
+# verbatim from a Linux host keeps working.
 
 # Base URL of the STNS API, including the version prefix.
 api_endpoint = "http://localhost:1104/v1"
@@ -44,8 +45,8 @@ api_endpoint = "http://localhost:1104/v1"
 
 # On-disk response cache, kept per euid under cache_dir.
 # A negative (404) answer is cached separately and for much less time.
-# cache_dir defaults to /var/db/stns: NetBSD's hier(7) has no /var/cache
-# and keeps generated data under /var/db.
+# cache_dir defaults to /var/db/stns on NetBSD and /var/cache/stns on
+# FreeBSD, following each system's hier(7).
 #cache              = true
 #cache_dir          = "/var/cache/stns"
 #cache_ttl          = 600

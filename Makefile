@@ -1,21 +1,25 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
-# nss_stns - STNS name service switch module for NetBSD.
+# nss_stns - STNS name service switch module for NetBSD and FreeBSD.
 # Written for BSD make; run it as "make".
 
 OS!=		uname -s
 
-.if ${OS} != "NetBSD"
-.error nss_stns is a NetBSD nsswitch module, and this is ${OS}
-.endif
-
-# libc dlopen()s nss_<source>.so.<NSS_MODULE_INTERFACE_VERSION>, which is 0 here.
+.if ${OS} == "NetBSD"
+# libc dlopen()s nss_<source>.so.<NSS_MODULE_INTERFACE_VERSION>, and that
+# version number is 0 on NetBSD and 1 on FreeBSD.
 NSS_VERSION=	0
 LOCALBASE?=	/usr/pkg
+.elif ${OS} == "FreeBSD" || ${OS} == "MidnightBSD"
+NSS_VERSION=	1
+LOCALBASE?=	/usr/local
+.else
+.error nss_stns supports NetBSD and FreeBSD only, not ${OS}
+.endif
 
 PREFIX?=	${LOCALBASE}
-# pkgsrc calls this PKG_SYSCONFDIR and defaults it to ${PREFIX}/etc.  Override
-# it if your pkgsrc is set up with PKG_SYSCONFDIR=/etc.
+# pkgsrc calls this PKG_SYSCONFDIR and FreeBSD ports ETCDIR; both default to
+# ${PREFIX}/etc.  Override it if your pkgsrc is set up with PKG_SYSCONFDIR=/etc.
 SYSCONFDIR?=	${PREFIX}/etc
 LIBDIR?=	${PREFIX}/lib
 BINDIR?=	${PREFIX}/bin

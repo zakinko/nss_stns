@@ -17,9 +17,22 @@ STAGE=${STAGE:-/tmp/nss_stns_stage}
 SCRATCH=${SCRATCH:-/tmp/nss_stns_plist}
 
 OS=$(uname -s)
-[ "$OS" = NetBSD ] || { echo "unsupported OS: $OS" >&2; exit 1; }
-PREFIX=/usr/pkg
-PLIST=$SRCDIR/pkg/pkgsrc/security/nss_stns/PLIST
+case "$OS" in
+NetBSD)
+	PREFIX=/usr/pkg
+	PLIST=$SRCDIR/pkg/pkgsrc/security/nss_stns/PLIST
+	NSS_VERSION=0
+	;;
+FreeBSD|MidnightBSD)
+	PREFIX=/usr/local
+	PLIST=$SRCDIR/pkg/ports/net/nss_stns/pkg-plist
+	NSS_VERSION=1
+	;;
+*)
+	echo "unsupported OS: $OS" >&2
+	exit 1
+	;;
+esac
 
 rm -rf "$STAGE" "$SCRATCH"
 mkdir -p "$STAGE" "$SCRATCH"
@@ -35,7 +48,9 @@ installed=$(cd "$STAGE$PREFIX" && find . -type f | sed 's|^\./||' | sort)
 # From the packing list, keep the plain file entries, plus the source side of
 # a pkg(8) "@sample src dest" line.  Directory and hook entries are the
 # package manager's business, not ours.
-expected=$(cat "$PLIST" |
+# pkg(8) writes %%VAR%% and pkgsrc writes ${VAR}; both name the same thing.
+expected=$(sed -e "s/%%NSS_VERSION%%/$NSS_VERSION/" \
+	-e "s/\${NSS_VERSION}/$NSS_VERSION/" "$PLIST" |
 	awk '
 		/^@sample/  { print $2; next }   # pkg(8): "@sample src dest"
 		/^@/        { next }             # @dir, @comment, @postexec, ...
