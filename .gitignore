@@ -1,0 +1,9 @@
+*.o
+nss_stns.so.*
+stns-key-wrapper
+stns_test
+stns_test-asan
+*.core
+*.dSYM/
+__pycache__/
+*.pyc

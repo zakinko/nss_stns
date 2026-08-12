@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # The VM image and its package set drift underneath us, so build and test
+  # on a schedule as well, not only when something here changes.
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+jobs:
+  # Runs on the host, not in a VM: the check needs git, and it is the same
+  # answer on every platform.
+  ident:
+    name: ident line
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: sh tests/check_ident.sh
+
+  # NetBSD is the reference platform: this is the nsswitch interface it
+  # designed, and the other two are adaptations of what works here.
+  netbsd:
+    name: NetBSD
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        uses: vmactions/netbsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            /usr/sbin/pkg_add curl
+            /usr/sbin/pkg_add python312 || /usr/sbin/pkg_add python311 || /usr/sbin/pkg_add python310
+          run: |
+            set -e
+            uname -a
+            echo "== build =="
+            make
+            ls -l nss_stns.so.0 stns-key-wrapper
+            echo "== exported symbols =="
+            make symbols
+            echo "== packaging lists =="
+            make plist
+            echo "== bundled third party code =="
+            make external
+            echo "== unit tests and module registration =="
+            make test
+            echo "== integration tests =="
+            PYTHON=$(ls /usr/pkg/bin/python3.[0-9]* 2>/dev/null | head -1)
+            test -n "$PYTHON" || { echo "no python3 found" >&2; exit 1; }
+            PYTHON="$PYTHON" make integration

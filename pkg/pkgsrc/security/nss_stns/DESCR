@@ -1,0 +1,10 @@
+nss_stns resolves users and groups from an STNS API server through the
+nsswitch(5) module interface, so that getpwnam(3), getgrnam(3),
+getgrouplist(3) and the rest of the passwd and group databases answer with
+accounts held centrally rather than only those in /etc/passwd.
+
+It also ships stns-key-wrapper, which prints a user's SSH public keys for
+sshd_config's AuthorizedKeysCommand.
+
+The configuration file is the same stns.conf used by the Linux client, so a
+configuration can be copied from an existing host unchanged.

@@ -1,0 +1,4 @@
+@comment $NetBSD$
+bin/stns-key-wrapper
+lib/nss_stns.so.0
+share/examples/nss_stns/stns.conf

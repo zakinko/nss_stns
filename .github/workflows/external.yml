@@ -1,0 +1,36 @@
+name: External
+
+# The bundled third party code under external/ is checked two ways.
+#
+# On a change to it, only the checksums in external/MANIFEST are verified,
+# which needs no network and catches a copy edited in place.
+#
+# On a schedule, the recorded upstream revisions are checked as well: whether
+# upstream has moved on, and whether upstream at the recorded revision still
+# matches byte for byte what is bundled here.  Nothing else would ever notice
+# a bundled parser quietly going years out of date.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'external/**'
+      - 'tests/check_external.sh'
+      - '.github/workflows/external.yml'
+  pull_request:
+    paths:
+      - 'external/**'
+      - 'tests/check_external.sh'
+      - '.github/workflows/external.yml'
+  schedule:
+    # Mondays, at a minute nobody else picked.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  external:
+    name: external/ provenance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the bundled code against its manifest and against upstream
+        run: sh tests/check_external.sh --upstream

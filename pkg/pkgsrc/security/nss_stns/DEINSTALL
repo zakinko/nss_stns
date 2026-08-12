@@ -1,0 +1,14 @@
+# $NetBSD$
+#
+# Take away the /usr/lib symlink that INSTALL created.  See the comment there
+# for why ${STAGE} is tested rather than $2.
+
+STNS_MODULE="nss_stns.so.0"
+
+case ${STAGE} in
+DEINSTALL)
+	if ${TEST} -h "/usr/lib/${STNS_MODULE}"; then
+		${RM} -f "/usr/lib/${STNS_MODULE}"
+	fi
+	;;
+esac

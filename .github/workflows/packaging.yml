@@ -1,0 +1,68 @@
+name: Packaging
+
+# Builds the pkgsrc package for real, rather than only checking its packing
+# list against a staged install the way the main CI does.  It needs a whole
+# pkgsrc tree in the VM, so it runs on request rather than on every push.
+on:
+  workflow_dispatch:
+
+env:
+  VERSION: 0.1.0
+
+jobs:
+  pkgsrc:
+    name: pkgsrc (NetBSD)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the pkgsrc package
+        uses: vmactions/netbsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            /usr/sbin/pkg_add curl digest
+          run: |
+            set -e
+            VERSION=0.1.0
+            WORK=$(pwd)
+
+            echo "== fetching pkgsrc =="
+            ftp -o /tmp/pkgsrc.tar.gz \
+              https://cdn.NetBSD.org/pub/pkgsrc/current/pkgsrc.tar.gz
+            tar -C /usr -xzf /tmp/pkgsrc.tar.gz
+            rm -f /tmp/pkgsrc.tar.gz
+
+            echo "== pkglint =="
+            # pkglint is pkgsrc's own correctness check: Makefile ordering and
+            # style, PLIST, DESCR length, category, licence spelling.  It is
+            # the part of a pkgsrc review that can be automated.
+            /usr/sbin/pkg_add pkglint || true
+
+            echo "== dropping the package in =="
+            mkdir -p /usr/pkgsrc/security/nss_stns
+            cp "$WORK"/pkg/pkgsrc/security/nss_stns/* /usr/pkgsrc/security/nss_stns/
+
+            # Build from the tree under test rather than a released tarball.
+            mkdir -p /usr/pkgsrc/distfiles /tmp/dist/nss_stns-$VERSION
+            (cd "$WORK" && tar --exclude .git -cf - .) |
+              (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
+            tar -C /tmp/dist -czf \
+              /usr/pkgsrc/distfiles/nss_stns-$VERSION.tar.gz nss_stns-$VERSION
+
+            cd /usr/pkgsrc/security/nss_stns
+            make makesum
+            pkglint .
+
+            echo "== build, package, install =="
+            # Pull dependencies in as binary packages.  Building the whole
+            # chain from source would say nothing about this package and take
+            # hours doing it.
+            make DEPENDS_TARGET=bin-install package
+            make install
+            echo "== the module must be where libc will look for it =="
+            ls -l /usr/pkg/lib/nss_stns.so.0 /usr/lib/nss_stns.so.0
+            test -h /usr/lib/nss_stns.so.0
+            test "$(readlink /usr/lib/nss_stns.so.0)" = /usr/pkg/lib/nss_stns.so.0
+            echo "== deinstall must take the symlink with it =="
+            make deinstall
+            test ! -e /usr/lib/nss_stns.so.0
