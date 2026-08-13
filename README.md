@@ -2,8 +2,8 @@
 
 [日本語](README.ja.md)
 
-An [STNS](https://stns.jp) name service switch module for **NetBSD** and
-**FreeBSD**.
+An [STNS](https://stns.jp) name service switch module for **NetBSD**, **FreeBSD**
+and **DragonFly BSD**.
 
 STNS's own client, [STNS/libnss](https://github.com/STNS/libnss), targets glibc's
 NSS. This is a separate implementation against the BSD `nsswitch(5)` module
@@ -12,25 +12,26 @@ resolve users and groups from an STNS API server.
 
 NetBSD is the reference platform — it designed this interface, and it has the
 larger surface, dispatching the non-reentrant entry points as well as the `_r`
-ones. FreeBSD is an adaptation of what works there.
+ones. FreeBSD and DragonFly are adaptations of what works there.
 
 The client configuration file is the same `stns.conf` you already use on Linux.
 
 ## Status
 
-| | NetBSD | FreeBSD |
-| --- | --- | --- |
-| passwd lookups (name / uid / enumeration) | yes | yes |
-| group lookups (name / gid / enumeration) | yes | yes |
-| supplementary groups (`getgroupmembership`) | yes | yes |
-| non-reentrant `getpwnam(3)` / `getgrnam(3)` | yes | n/a |
-| `stns-key-wrapper` for `AuthorizedKeysCommand` | yes | yes |
-| `cache-stnsd` unix socket | yes | yes |
-| CI | yes | yes |
+| | NetBSD | FreeBSD | DragonFly |
+| --- | --- | --- | --- |
+| passwd lookups (name / uid / enumeration) | yes | yes | yes |
+| group lookups (name / gid / enumeration) | yes | yes | yes |
+| supplementary groups (`getgroupmembership`) | yes | yes | yes |
+| non-reentrant `getpwnam(3)` / `getgrnam(3)` | yes | n/a | n/a |
+| `stns-key-wrapper` for `AuthorizedKeysCommand` | yes | yes | yes |
+| `cache-stnsd` unix socket | yes | yes | yes |
+| CI | yes | yes | yes |
 
 FreeBSD derivatives such as MidnightBSD, GhostBSD and HardenedBSD define
-`__FreeBSD__` and build from the same branch. DragonFly BSD's libc descends
-from FreeBSD's and should be close to a drop-in, but it is untested here.
+`__FreeBSD__` and build from the same branch. DragonFly's DPorts is generated
+from the FreeBSD Ports Collection rather than submitted to, so there is one
+port entry rather than two; see [`pkg/`](pkg/).
 
 OpenBSD and macOS are out of scope: neither has an nsswitch module interface at
 all. OpenBSD's only pluggable directory source is YP, which is why its base
@@ -47,7 +48,7 @@ pkgin install curl
 make
 make install          # PREFIX defaults to /usr/pkg
 
-# FreeBSD
+# FreeBSD / DragonFly
 pkg install curl
 make
 make install          # PREFIX defaults to /usr/local
@@ -55,7 +56,7 @@ make install          # PREFIX defaults to /usr/local
 
 `make install` places:
 
-| File | NetBSD | FreeBSD |
+| File | NetBSD | FreeBSD / DragonFly |
 | --- | --- | --- |
 | module | `/usr/pkg/lib/nss_stns.so.0` | `/usr/local/lib/nss_stns.so.1` |
 | module symlink | `/usr/lib/nss_stns.so.0` | `/usr/lib/nss_stns.so.1` |
@@ -72,8 +73,8 @@ load for `su(1)`, `login(1)` and anything else that runs privileged. The
 symlink is what makes those work.
 
 **Why the version suffix differs.** The file name ends in
-`NSS_MODULE_INTERFACE_VERSION`, which is `0` on NetBSD and `1` on FreeBSD. The
-`Makefile` picks the right one from `uname -s`.
+`NSS_MODULE_INTERFACE_VERSION`, which is `0` on NetBSD and `1` on FreeBSD and
+DragonFly. The `Makefile` picks the right one from `uname -s`.
 
 Override the paths as usual:
 
@@ -81,17 +82,17 @@ Override the paths as usual:
 make PREFIX=/opt/stns SYSCONFDIR=/etc install
 ```
 
-Packages for pkgsrc and the ports tree are in [`pkg/`](pkg/), with the
-commands for dropping them into `/usr/pkgsrc` and `/usr/ports` and building
-them there.
+Packages for pkgsrc, the ports tree and DPorts are in [`pkg/`](pkg/), with the
+commands for dropping them into `/usr/pkgsrc`, `/usr/ports` and `/usr/dports`
+and building them there.
 
 ## Configuration
 
 ### nsswitch.conf
 
 This one is not ours to place: it belongs to the base system and its location
-is fixed as `_PATH_NS_CONF` in `<nsswitch.h>`, so it stays in `/etc` on both
-systems regardless of where the package itself was installed. Add
+is fixed as `_PATH_NS_CONF` in `<nsswitch.h>`, so it stays in `/etc` on every
+one of these systems regardless of where the package itself was installed. Add
 `stns` after `files`:
 
 ```text
@@ -179,8 +180,9 @@ handling matters more than throughput.
   path. Each user gets a private directory and the module refuses to read or
   overwrite a file it does not own. A 404 is remembered too, as a zero length
   file with its own shorter `negative_cache_ttl`. `cache_dir` defaults to
-  `/var/db/stns` on NetBSD and `/var/cache/stns` on FreeBSD, because `hier(7)`
-  documents `/var/cache` on the latter and nothing of the sort on the former.
+  `/var/db/stns` on NetBSD and `/var/cache/stns` on FreeBSD and DragonFly,
+  because `hier(7)` documents `/var/cache` on the latter and nothing of the
+  sort on the former.
 - **A connection failure trips a circuit breaker** for `request_locktime`
   seconds, so an unreachable server costs one timeout rather than one per
   lookup. The breaker file lives in the caller's own cache directory rather
@@ -266,9 +268,9 @@ equivalent of the CVS import tag NetBSD would use for this, so it is written
 down. A checksum mismatch means somebody edited a bundled copy in place, which
 defeats the point of recording a revision at all.
 
-CI runs all of it on NetBSD and FreeBSD, on every push and once a week — the
-VM images and their package sets drift underneath us, and a scheduled build is
-what notices. A separate weekly job additionally asks
+CI runs all of it on NetBSD, FreeBSD and DragonFly, on every push and once a
+week — the VM images and their package sets drift underneath us, and a
+scheduled build is what notices. A separate weekly job additionally asks
 GitHub whether the revisions in the manifest are still upstream's current
 ones, and whether upstream at those revisions still matches what is bundled,
 byte for byte. Without it a bundled parser can go years out of date without

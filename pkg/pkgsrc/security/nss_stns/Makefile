@@ -18,16 +18,16 @@ USE_TOOLS+=	pkg-config
 # nsswitch module interface at all - Linux has NSS but not this one, and
 # macOS has Open Directory.  Say so here, so pkgsrc declines cleanly instead
 # of letting the build fail halfway through with a compiler error.
-ONLY_FOR_PLATFORM=	NetBSD-*-* FreeBSD-*-* MidnightBSD-*-*
+ONLY_FOR_PLATFORM=	NetBSD-*-* FreeBSD-*-* DragonFly-*-* MidnightBSD-*-*
 
 .include "../../mk/bsd.prefs.mk"
 
 # libc dlopen()s nss_<source>.so.<NSS_MODULE_INTERFACE_VERSION>.  That number
-# is 0 on NetBSD and 1 on FreeBSD, and pkgsrc runs on both,
+# is 0 on NetBSD and 1 on FreeBSD and DragonFly, and pkgsrc runs on all three,
 # so the file name cannot be written down once and left alone: a bootstrapped
-# pkgsrc on FreeBSD builds nss_stns.so.1, and a PLIST naming
+# pkgsrc on either of the other two builds nss_stns.so.1, and a PLIST naming
 # .so.0 would fail the packing list check every time.  ONLY_FOR_PLATFORM above
-# is what makes the else branch here mean exactly "FreeBSD".
+# is what makes the else branch here mean exactly "FreeBSD or DragonFly".
 .if ${OPSYS} == "NetBSD"
 NSS_VERSION=	0
 .else

@@ -1,6 +1,6 @@
 name: Packaging
 
-# Builds the pkgsrc package and the FreeBSD port for real, rather than
+# Builds the pkgsrc package and the ports/DPorts port for real, rather than
 # only checking the packing lists against a staged install the way the main CI
 # does.  It needs a whole package collection in each VM, so it runs on its own
 # schedule, on request, rather than on every push.
@@ -132,6 +132,97 @@ jobs:
             make deinstall
             test ! -e /usr/lib/nss_stns.so.1
 
+  dports:
+    name: DPorts (DragonFly)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the port from DPorts
+        uses: vmactions/dragonflybsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            pkg update -f
+            pkg upgrade -y
+            pkg install -y git curl
+          run: |
+            set -e
+            VERSION=0.1.0
+            WORK=$(pwd)
+
+            echo "== fetching DPorts =="
+            git clone --depth 1 --single-branch \
+              https://github.com/DragonFlyBSD/DPorts.git /usr/dports
+
+            # The FreeBSD port is used unchanged: DPorts is a fork of ports,
+            # and DragonFly builds from the same branch of the module.
+            echo "== dropping the port in =="
+            mkdir -p /usr/dports/net/nss_stns
+            cp "$WORK"/pkg/ports/net/nss_stns/* /usr/dports/net/nss_stns/
+
+            mkdir -p /usr/distfiles /tmp/dist/nss_stns-$VERSION
+            (cd "$WORK" && tar --exclude .git -cf - .) |
+              (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
+            tar -C /tmp/dist -czf \
+              /usr/distfiles/zakinko-nss_stns-v${VERSION}_GH0.tar.gz \
+              nss_stns-$VERSION
+
+            cd /usr/dports/net/nss_stns
+            make makesum
+            echo "== stage and check the packing list =="
+            make stage
+            make check-plist
+
+            # pkg(8) packages with zstd, and libpkg treats a libarchive
+            # that would have to shell out to an external zstd as fatal
+            # rather than falling back - see packing_set_format() and its
+            # ARCHIVE_WARN case.  Asking for another format explicitly does
+            # work, so try zstd first and fall back rather than leaving the
+            # cycle unfinished, and say which one was used either way.
+            echo "== what this image can compress with =="
+            pkg -v
+            : > /tmp/probe
+            if bsdtar --zstd -cf /tmp/probe.tzst /tmp/probe 2>/dev/null; then
+                    echo "  libarchive: zstd ok"
+            else
+                    echo "  libarchive: no builtin zstd"
+            fi
+
+            echo "== package and install =="
+            if make package; then
+                    want=28b52ffd
+                    echo "  packaged with zstd"
+            else
+                    echo "  zstd refused, asking for xz"
+                    make package PKG_COMPRESSION_FORMAT=txz
+                    want=fd377a58
+            fi
+
+            pkgfile=$(find "$(make -V WRKDIR)" /usr/dports/packages \
+                -name 'nss_stns-*.pkg' -type f 2>/dev/null | head -1)
+            test -n "$pkgfile" || { echo "no package was built" >&2; exit 1; }
+            ls -l "$pkgfile"
+            magic=$(dd if="$pkgfile" bs=1 count=4 2>/dev/null | od -An -tx1 | tr -d ' \n')
+            echo "  magic: $magic"
+            test "$magic" = "$want"
+
+            make install
+            ls -l /usr/local/lib/nss_stns.so.1 /usr/lib/nss_stns.so.1
+            test -h /usr/lib/nss_stns.so.1
+            test "$(readlink /usr/lib/nss_stns.so.1)" = /usr/local/lib/nss_stns.so.1
+            echo "== deinstall must take the symlink with it =="
+            make deinstall
+            test ! -e /usr/lib/nss_stns.so.1
+
+
+
+
+  # pkgsrc is not only NetBSD's: it bootstraps on FreeBSD, on DragonFly - where
+  # it was the native package system before DPorts - and on much else besides.
+  # On any of those the module libc looks for is nss_stns.so.1 rather than
+  # .so.0, so a PLIST naming one version outright is wrong half the time.
+  # These two jobs are what notice; both platforms are covered because
+  # "it should work there too" is not the same as knowing.
   pkgsrc-bootstrap:
     name: pkgsrc bootstrapped (FreeBSD)
     runs-on: ubuntu-latest
@@ -151,6 +242,62 @@ jobs:
 
             echo "== fetching pkgsrc =="
             fetch -o /tmp/pkgsrc.tar.gz \
+              https://cdn.NetBSD.org/pub/pkgsrc/current/pkgsrc.tar.gz
+            tar -C /usr -xzf /tmp/pkgsrc.tar.gz
+            rm -f /tmp/pkgsrc.tar.gz
+
+            echo "== bootstrapping =="
+            cd /usr/pkgsrc/bootstrap
+            ./bootstrap --workdir /tmp/bootstrap
+            export PATH=/usr/pkg/bin:/usr/pkg/sbin:$PATH
+
+            echo "== dropping the package in =="
+            mkdir -p /usr/pkgsrc/security/nss_stns
+            cp "$WORK"/pkg/pkgsrc/security/nss_stns/* /usr/pkgsrc/security/nss_stns/
+
+            mkdir -p /usr/pkgsrc/distfiles /tmp/dist/nss_stns-$VERSION
+            (cd "$WORK" && tar --exclude .git -cf - .) |
+              (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
+            tar -C /tmp/dist -czf \
+              /usr/pkgsrc/distfiles/nss_stns-$VERSION.tar.gz nss_stns-$VERSION
+
+            cd /usr/pkgsrc/security/nss_stns
+            bmake makesum
+
+            echo "== the package must agree with the platform on the version =="
+            bmake show-var VARNAME=NSS_VERSION
+            test "$(bmake show-var VARNAME=NSS_VERSION)" = 1
+
+            echo "== build, package, install =="
+            bmake package
+            bmake install
+            ls -l /usr/pkg/lib/nss_stns.so.1 /usr/lib/nss_stns.so.1
+            test -h /usr/lib/nss_stns.so.1
+            test "$(readlink /usr/lib/nss_stns.so.1)" = /usr/pkg/lib/nss_stns.so.1
+            bmake deinstall
+            test ! -e /usr/lib/nss_stns.so.1
+
+  pkgsrc-bootstrap-dragonfly:
+    name: pkgsrc bootstrapped (DragonFly)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap pkgsrc and build the package
+        uses: vmactions/dragonflybsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            pkg update -f
+            pkg upgrade -y
+            pkg install -y curl
+          run: |
+            set -e
+            VERSION=0.1.0
+            WORK=$(pwd)
+            df -h /
+
+            echo "== fetching pkgsrc =="
+            curl -sSL -o /tmp/pkgsrc.tar.gz \
               https://cdn.NetBSD.org/pub/pkgsrc/current/pkgsrc.tar.gz
             tar -C /usr -xzf /tmp/pkgsrc.tar.gz
             rm -f /tmp/pkgsrc.tar.gz

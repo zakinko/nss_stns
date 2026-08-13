@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
-# nss_stns - STNS name service switch module for NetBSD and FreeBSD.
+# nss_stns - STNS name service switch module for NetBSD, FreeBSD and DragonFly BSD.
 # Written for BSD make; run it as "make".
 
 OS!=		uname -s
 
 .if ${OS} == "NetBSD"
 # libc dlopen()s nss_<source>.so.<NSS_MODULE_INTERFACE_VERSION>, and that
-# version number is 0 on NetBSD and 1 on FreeBSD.
+# version number is 0 on NetBSD and 1 on FreeBSD and DragonFly.
 NSS_VERSION=	0
 LOCALBASE?=	/usr/pkg
-.elif ${OS} == "FreeBSD" || ${OS} == "MidnightBSD"
+.elif ${OS} == "FreeBSD" || ${OS} == "DragonFly" || ${OS} == "MidnightBSD"
 NSS_VERSION=	1
 LOCALBASE?=	/usr/local
 .else
-.error nss_stns supports NetBSD and FreeBSD only, not ${OS}
+.error nss_stns supports NetBSD, FreeBSD and DragonFly BSD only, not ${OS}
 .endif
 
 PREFIX?=	${LOCALBASE}

@@ -18,7 +18,8 @@
  *	- NS_RETURN is a status bit on FreeBSD but a source action on NetBSD,
  *	  where its value collides with NS_SUCCESS; see STNS_NS_ERANGE.
  *
- * Everything below the argument unpacking is shared.
+ * DragonFly matches FreeBSD on every one of those points and builds from the
+ * same branch.  Everything below the argument unpacking is shared.
  */
 #include <errno.h>
 

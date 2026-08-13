@@ -8,7 +8,7 @@
 
 # Install this as ${SYSCONFDIR}/stns/client/stns.conf, which is
 #   /usr/pkg/etc/stns/client/stns.conf   on NetBSD
-#   /usr/local/etc/stns/client/stns.conf on FreeBSD
+#   /usr/local/etc/stns/client/stns.conf on FreeBSD and DragonFly
 # /etc/stns/client/stns.conf is read as a fallback, so a file copied
 # verbatim from a Linux host keeps working.
 
@@ -46,7 +46,7 @@ api_endpoint = "http://localhost:1104/v1"
 # On-disk response cache, kept per euid under cache_dir.
 # A negative (404) answer is cached separately and for much less time.
 # cache_dir defaults to /var/db/stns on NetBSD and /var/cache/stns on
-# FreeBSD, following each system's hier(7).
+# FreeBSD and DragonFly, following each system's hier(7).
 #cache              = true
 #cache_dir          = "/var/cache/stns"
 #cache_ttl          = 600

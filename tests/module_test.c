@@ -17,7 +17,7 @@
 
 #if defined(__NetBSD__)
 #define EXPECT_NETBSD 1
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 #define EXPECT_FREEBSD 1
 #else
 #error "unsupported platform"

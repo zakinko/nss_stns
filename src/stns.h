@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2026 zakinko
  *
- * nss_stns - STNS name service switch module for NetBSD and FreeBSD.
+ * nss_stns - STNS name service switch module for NetBSD, FreeBSD and DragonFly BSD.
  *
  * Portions are derived from libnss (https://github.com/STNS/libnss),
  * Copyright (c) 2026 pyama86, distributed under the MIT license.
@@ -35,16 +35,17 @@
  *
  * NetBSD designed this interface; FreeBSD imported it and changed the shape of
  * the dispatch arguments, bumped NSS_MODULE_INTERFACE_VERSION from 0 to 1 and
- * redefined NS_RETURN from a source action into a status bit.  FreeBSD
- * derivatives such as MidnightBSD, GhostBSD and HardenedBSD define
- * __FreeBSD__ and need nothing further.
+ * redefined NS_RETURN from a source action into a status bit.  DragonFly's
+ * libc descends from FreeBSD's and matches it in every one of those respects,
+ * so it builds from the same branch.  FreeBSD derivatives such as MidnightBSD,
+ * GhostBSD and HardenedBSD define __FreeBSD__ and need nothing further.
  */
 #if defined(__NetBSD__)
 #define STNS_NSS_NETBSD 1
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 #define STNS_NSS_FREEBSD 1
 #else
-#error "nss_stns supports NetBSD and FreeBSD only"
+#error "nss_stns supports NetBSD, FreeBSD and DragonFly BSD only"
 #endif
 
 #define STNS_VERSION "0.1.0"

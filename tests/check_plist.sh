@@ -23,7 +23,7 @@ NetBSD)
 	PLIST=$SRCDIR/pkg/pkgsrc/security/nss_stns/PLIST
 	NSS_VERSION=0
 	;;
-FreeBSD|MidnightBSD)
+FreeBSD|DragonFly|MidnightBSD)
 	PREFIX=/usr/local
 	PLIST=$SRCDIR/pkg/ports/net/nss_stns/pkg-plist
 	NSS_VERSION=1

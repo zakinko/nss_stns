@@ -4,8 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
-  # The VM images and their package sets drift underneath us, so build and
-  # test on a schedule as well, not only when something here changes.
+  # The VM images and their package sets drift underneath us - a DragonFly
+  # image once shipped a libcurl its own libssh2 could not satisfy - so build
+  # and test on a schedule as well, not only when something here changes.
   schedule:
     - cron: '17 5 * * 1'
   workflow_dispatch:
@@ -82,5 +83,38 @@ jobs:
             make test
             echo "== unit tests under AddressSanitizer / UBSan =="
             make asan
+            echo "== integration tests =="
+            PYTHON=python3 make integration
+
+  dragonfly:
+    name: DragonFly BSD
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        uses: vmactions/dragonflybsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            # The stock image ships a libcurl newer than its libssh2, which
+            # leaves libcurl.so.4 with an unresolved symbol; bring the whole
+            # package set up to date before installing.
+            pkg update -f
+            pkg upgrade -y
+            pkg install -y curl python3
+          run: |
+            set -e
+            uname -a
+            echo "== build =="
+            make
+            ls -l nss_stns.so.1 stns-key-wrapper
+            echo "== exported symbols =="
+            make symbols
+            echo "== packaging lists =="
+            make plist
+            echo "== bundled third party code =="
+            make external
+            echo "== unit tests and module registration =="
+            make test
             echo "== integration tests =="
             PYTHON=python3 make integration

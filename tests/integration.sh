@@ -20,7 +20,7 @@ OS=$(uname -s)
 case "$OS" in
 NetBSD)		LOCALBASE=${LOCALBASE:-/usr/pkg}
 		CACHEDIR=${CACHEDIR:-/var/db/stns} ;;
-FreeBSD|MidnightBSD)
+FreeBSD|DragonFly|MidnightBSD)
 		LOCALBASE=${LOCALBASE:-/usr/local}
 		CACHEDIR=${CACHEDIR:-/var/cache/stns} ;;
 *)		echo "unsupported OS: $OS" >&2; exit 1 ;;
