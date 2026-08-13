@@ -22,7 +22,7 @@ NetBSD が基準プラットフォームです。このインターフェース�
 | `cache-stnsd` の unix ソケット | ○ | ○ | ○ |
 | CI | ○ | ○ | ○ |
 
-MidnightBSD、GhostBSD、HardenedBSD といった FreeBSD 派生は `__FreeBSD__` を定義するため、同じ分岐でビルドされます。DragonFly の DPorts は FreeBSD Ports Collection から生成されるもので投稿先ではないため、port のエントリは2つではなく1つです。[`pkg/`](pkg/) を参照してください。
+MidnightBSD、GhostBSD、HardenedBSD といった FreeBSD 派生は `__FreeBSD__` を定義するため、同じ分岐でビルドされます。DragonFly の DPorts は FreeBSD Ports Collection から生成されるもので投稿先ではないため、port のエントリは2つではなく1つです。[ports-zakinko](https://github.com/zakinko/ports-zakinko) を参照してください。
 
 OpenBSD と macOS は対象外です。どちらも nsswitch のモジュールインターフェース自体を持ちません。OpenBSD で差し込めるディレクトリソースは YP だけで、base に `ypldap(8)` があるのはそのためです。macOS は Open Directory を使います。どちらかに対応するとなれば、このモジュールの移植ではなくデーモンを書く話になります。
 
@@ -63,7 +63,7 @@ make install          # PREFIX の既定値は /usr/local
 make PREFIX=/opt/stns SYSCONFDIR=/etc install
 ```
 
-pkgsrc、ports、DPorts 向けのパッケージは [`pkg/`](pkg/) にあります。`/usr/pkgsrc`、`/usr/ports`、`/usr/dports` に配置してビルドするコマンドも書いてあります。
+パッケージはこのリポジトリには置いていません。他の自作ソフトウェアの分と一緒に、pkgsrc パッケージは [pkgsrc-zakinko](https://github.com/zakinko/pkgsrc-zakinko)、ports と DPorts を兼ねる port は [ports-zakinko](https://github.com/zakinko/ports-zakinko) にあります。`/usr/pkgsrc`、`/usr/ports`、`/usr/dports` に配置してビルドするコマンドも、それぞれの README に書いてあります。
 
 ## 設定
 
@@ -146,7 +146,8 @@ unix_socket = "/var/run/cache-stnsd.sock"
 ```sh
 make test          # 単体テストと、libc と同じ手順でのモジュール読み込み
 make symbols       # nss_module_register だけをエクスポートしていることの確認
-make plist         # パッケージリストと staged install の突き合わせ
+make plist         # パッケージリストと staged install の突き合わせ。
+                   # オーバーレイの clone が要る (tests/check_plist.sh 参照)
 make ident         # 配布 tarball で $SNOWRABBIT$ が展開されることの確認
 make external      # 同梱サードパーティコードとマニフェストの突き合わせ
 make asan          # AddressSanitizer と UBSan の下での単体テスト

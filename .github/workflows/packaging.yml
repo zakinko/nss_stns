@@ -4,11 +4,24 @@ name: Packaging
 # only checking the packing lists against a staged install the way the main CI
 # does.  It needs a whole package collection in each VM, so it runs on its own
 # schedule, on request, rather than on every push.
+#
+# The package definitions come from the overlays rather than from this tree;
+# what is built is this working tree, seeded into distfiles as a tarball.  So
+# the question answered here is whether the code still packages, not whether
+# the package definition is correct - that is the overlay's own business.
 on:
   workflow_dispatch:
 
 env:
   VERSION: 0.1.0
+  # The packaging is not in this repository: it lives in the overlays, beside
+  # the packaging for everything else here.  Pin these to a tag when cutting a
+  # release; main is what says whether the packaging still works today.
+  #
+  #   https://github.com/zakinko/pkgsrc-zakinko
+  #   https://github.com/zakinko/ports-zakinko
+  PKGSRC_OVERLAY_REF: main
+  PORTS_OVERLAY_REF: main
 
 jobs:
   pkgsrc:
@@ -16,6 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: zakinko/pkgsrc-zakinko
+          ref: ${{ env.PKGSRC_OVERLAY_REF }}
+          path: overlay-pkgsrc
       - name: Build the pkgsrc package
         uses: vmactions/netbsd-vm@v1
         with:
@@ -40,17 +58,22 @@ jobs:
             /usr/sbin/pkg_add pkglint || true
 
             echo "== dropping the package in =="
-            mkdir -p /usr/pkgsrc/security/nss_stns
-            cp "$WORK"/pkg/pkgsrc/security/nss_stns/* /usr/pkgsrc/security/nss_stns/
+            # The whole category goes in, not just this package: pkglint
+            # checks that a package is listed in its category Makefile, and
+            # that its first category is the directory it sits in.
+            mkdir -p /usr/pkgsrc/zakinko
+            (cd "$WORK"/overlay-pkgsrc && tar --exclude .git -cf - .) |
+              (cd /usr/pkgsrc/zakinko && tar -xf -)
 
             # Build from the tree under test rather than a released tarball.
             mkdir -p /usr/pkgsrc/distfiles /tmp/dist/nss_stns-$VERSION
-            (cd "$WORK" && tar --exclude .git -cf - .) |
+            (cd "$WORK" && tar --exclude .git \
+                --exclude overlay-pkgsrc --exclude overlay-ports -cf - .) |
               (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
             tar -C /tmp/dist -czf \
               /usr/pkgsrc/distfiles/nss_stns-$VERSION.tar.gz nss_stns-$VERSION
 
-            cd /usr/pkgsrc/security/nss_stns
+            cd /usr/pkgsrc/zakinko/nss_stns
             make makesum
             pkglint .
 
@@ -73,6 +96,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: zakinko/ports-zakinko
+          ref: ${{ env.PORTS_OVERLAY_REF }}
+          path: overlay-ports
       - name: Build the FreeBSD port
         uses: vmactions/freebsd-vm@v1
         with:
@@ -90,12 +118,13 @@ jobs:
 
             echo "== dropping the port in =="
             mkdir -p /usr/ports/net/nss_stns
-            cp "$WORK"/pkg/ports/net/nss_stns/* /usr/ports/net/nss_stns/
+            cp "$WORK"/overlay-ports/net/nss_stns/* /usr/ports/net/nss_stns/
 
             # USE_GITHUB would fetch a release tarball; seed one from the tree
             # under test instead, named the way the framework expects.
             mkdir -p /usr/ports/distfiles /tmp/dist/nss_stns-$VERSION
-            (cd "$WORK" && tar --exclude .git -cf - .) |
+            (cd "$WORK" && tar --exclude .git \
+                --exclude overlay-pkgsrc --exclude overlay-ports -cf - .) |
               (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
             tar -C /tmp/dist -czf \
               /usr/ports/distfiles/zakinko-nss_stns-v${VERSION}_GH0.tar.gz \
@@ -137,6 +166,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: zakinko/ports-zakinko
+          ref: ${{ env.PORTS_OVERLAY_REF }}
+          path: overlay-ports
       - name: Build the port from DPorts
         uses: vmactions/dragonflybsd-vm@v1
         with:
@@ -158,10 +192,11 @@ jobs:
             # and DragonFly builds from the same branch of the module.
             echo "== dropping the port in =="
             mkdir -p /usr/dports/net/nss_stns
-            cp "$WORK"/pkg/ports/net/nss_stns/* /usr/dports/net/nss_stns/
+            cp "$WORK"/overlay-ports/net/nss_stns/* /usr/dports/net/nss_stns/
 
             mkdir -p /usr/distfiles /tmp/dist/nss_stns-$VERSION
-            (cd "$WORK" && tar --exclude .git -cf - .) |
+            (cd "$WORK" && tar --exclude .git \
+                --exclude overlay-pkgsrc --exclude overlay-ports -cf - .) |
               (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
             tar -C /tmp/dist -czf \
               /usr/distfiles/zakinko-nss_stns-v${VERSION}_GH0.tar.gz \
@@ -228,6 +263,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: zakinko/pkgsrc-zakinko
+          ref: ${{ env.PKGSRC_OVERLAY_REF }}
+          path: overlay-pkgsrc
       - name: Bootstrap pkgsrc and build the package
         uses: vmactions/freebsd-vm@v1
         with:
@@ -252,16 +292,21 @@ jobs:
             export PATH=/usr/pkg/bin:/usr/pkg/sbin:$PATH
 
             echo "== dropping the package in =="
-            mkdir -p /usr/pkgsrc/security/nss_stns
-            cp "$WORK"/pkg/pkgsrc/security/nss_stns/* /usr/pkgsrc/security/nss_stns/
+            # The whole category goes in, not just this package: pkglint
+            # checks that a package is listed in its category Makefile, and
+            # that its first category is the directory it sits in.
+            mkdir -p /usr/pkgsrc/zakinko
+            (cd "$WORK"/overlay-pkgsrc && tar --exclude .git -cf - .) |
+              (cd /usr/pkgsrc/zakinko && tar -xf -)
 
             mkdir -p /usr/pkgsrc/distfiles /tmp/dist/nss_stns-$VERSION
-            (cd "$WORK" && tar --exclude .git -cf - .) |
+            (cd "$WORK" && tar --exclude .git \
+                --exclude overlay-pkgsrc --exclude overlay-ports -cf - .) |
               (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
             tar -C /tmp/dist -czf \
               /usr/pkgsrc/distfiles/nss_stns-$VERSION.tar.gz nss_stns-$VERSION
 
-            cd /usr/pkgsrc/security/nss_stns
+            cd /usr/pkgsrc/zakinko/nss_stns
             bmake makesum
 
             echo "== the package must agree with the platform on the version =="
@@ -282,6 +327,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: zakinko/pkgsrc-zakinko
+          ref: ${{ env.PKGSRC_OVERLAY_REF }}
+          path: overlay-pkgsrc
       - name: Bootstrap pkgsrc and build the package
         uses: vmactions/dragonflybsd-vm@v1
         with:
@@ -308,16 +358,21 @@ jobs:
             export PATH=/usr/pkg/bin:/usr/pkg/sbin:$PATH
 
             echo "== dropping the package in =="
-            mkdir -p /usr/pkgsrc/security/nss_stns
-            cp "$WORK"/pkg/pkgsrc/security/nss_stns/* /usr/pkgsrc/security/nss_stns/
+            # The whole category goes in, not just this package: pkglint
+            # checks that a package is listed in its category Makefile, and
+            # that its first category is the directory it sits in.
+            mkdir -p /usr/pkgsrc/zakinko
+            (cd "$WORK"/overlay-pkgsrc && tar --exclude .git -cf - .) |
+              (cd /usr/pkgsrc/zakinko && tar -xf -)
 
             mkdir -p /usr/pkgsrc/distfiles /tmp/dist/nss_stns-$VERSION
-            (cd "$WORK" && tar --exclude .git -cf - .) |
+            (cd "$WORK" && tar --exclude .git \
+                --exclude overlay-pkgsrc --exclude overlay-ports -cf - .) |
               (cd /tmp/dist/nss_stns-$VERSION && tar -xf -)
             tar -C /tmp/dist -czf \
               /usr/pkgsrc/distfiles/nss_stns-$VERSION.tar.gz nss_stns-$VERSION
 
-            cd /usr/pkgsrc/security/nss_stns
+            cd /usr/pkgsrc/zakinko/nss_stns
             bmake makesum
 
             echo "== the package must agree with the platform on the version =="

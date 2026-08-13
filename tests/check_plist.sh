@@ -16,16 +16,27 @@ STAGE=${STAGE:-/tmp/nss_stns_stage}
 # but what was installed into it.
 SCRATCH=${SCRATCH:-/tmp/nss_stns_plist}
 
+# The packing lists are not in this repository.  They belong to the packaging,
+# which is kept in its own overlay beside the packaging for everything else,
+# and CI checks the overlays out beside this tree.  Point these at your own
+# clones to run this by hand.
+PKGSRC_OVERLAY=${PKGSRC_OVERLAY:-$SRCDIR/overlay-pkgsrc}
+PORTS_OVERLAY=${PORTS_OVERLAY:-$SRCDIR/overlay-ports}
+
 OS=$(uname -s)
 case "$OS" in
 NetBSD)
 	PREFIX=/usr/pkg
-	PLIST=$SRCDIR/pkg/pkgsrc/security/nss_stns/PLIST
+	PLIST=$PKGSRC_OVERLAY/nss_stns/PLIST
+	OVERLAY_URL=https://github.com/zakinko/pkgsrc-zakinko.git
+	OVERLAY_DIR=$PKGSRC_OVERLAY
 	NSS_VERSION=0
 	;;
 FreeBSD|DragonFly|MidnightBSD)
 	PREFIX=/usr/local
-	PLIST=$SRCDIR/pkg/ports/net/nss_stns/pkg-plist
+	PLIST=$PORTS_OVERLAY/net/nss_stns/pkg-plist
+	OVERLAY_URL=https://github.com/zakinko/ports-zakinko.git
+	OVERLAY_DIR=$PORTS_OVERLAY
 	NSS_VERSION=1
 	;;
 *)
@@ -33,6 +44,15 @@ FreeBSD|DragonFly|MidnightBSD)
 	exit 1
 	;;
 esac
+
+# Say what is missing rather than failing later on an empty packing list, which
+# would read as "nothing is installed" and be wrong.
+if [ ! -f "$PLIST" ]; then
+	echo "no packing list at $PLIST" >&2
+	echo "the packaging lives in its own repository; clone it beside this tree:" >&2
+	echo "  git clone $OVERLAY_URL $OVERLAY_DIR" >&2
+	exit 1
+fi
 
 rm -rf "$STAGE" "$SCRATCH"
 mkdir -p "$STAGE" "$SCRATCH"

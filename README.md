@@ -31,7 +31,8 @@ The client configuration file is the same `stns.conf` you already use on Linux.
 FreeBSD derivatives such as MidnightBSD, GhostBSD and HardenedBSD define
 `__FreeBSD__` and build from the same branch. DragonFly's DPorts is generated
 from the FreeBSD Ports Collection rather than submitted to, so there is one
-port entry rather than two; see [`pkg/`](pkg/).
+port entry rather than two; see
+[ports-zakinko](https://github.com/zakinko/ports-zakinko).
 
 OpenBSD and macOS are out of scope: neither has an nsswitch module interface at
 all. OpenBSD's only pluggable directory source is YP, which is why its base
@@ -82,9 +83,12 @@ Override the paths as usual:
 make PREFIX=/opt/stns SYSCONFDIR=/etc install
 ```
 
-Packages for pkgsrc, the ports tree and DPorts are in [`pkg/`](pkg/), with the
-commands for dropping them into `/usr/pkgsrc`, `/usr/ports` and `/usr/dports`
-and building them there.
+The packaging is not kept here. It lives beside the packaging for everything
+else I maintain: the pkgsrc package in
+[pkgsrc-zakinko](https://github.com/zakinko/pkgsrc-zakinko), and the port that
+serves both ports and DPorts in
+[ports-zakinko](https://github.com/zakinko/ports-zakinko). Each has the
+commands for dropping it into `/usr/pkgsrc`, `/usr/ports` or `/usr/dports`.
 
 ## Configuration
 
@@ -209,7 +213,8 @@ handling matters more than throughput.
 ```sh
 make test          # unit tests, plus the module loaded the way libc loads it
 make symbols       # assert the module exports nss_module_register and nothing else
-make plist         # diff a staged install against the packing lists
+make plist         # diff a staged install against the packing lists,
+                   # which need an overlay clone: see tests/check_plist.sh
 make ident         # assert the sample config's ident line survives a release
 make external      # check the bundled third party code against its manifest
 make asan          # the unit tests under AddressSanitizer and UBSan

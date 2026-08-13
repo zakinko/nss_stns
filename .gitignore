@@ -7,3 +7,8 @@ stns_test-asan
 *.dSYM/
 __pycache__/
 *.pyc
+
+# Where "make plist" looks for the packing lists: clones of the packaging
+# overlays, which are their own repositories.
+overlay-pkgsrc/
+overlay-ports/

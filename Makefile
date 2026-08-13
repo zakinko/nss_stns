@@ -97,7 +97,9 @@ ident:
 external:
 	sh ${.CURDIR}/tests/check_external.sh
 
-# Stage an install and diff it against the packaging lists under pkg/.
+# Stage an install and diff it against the packing lists, which live in the
+# packaging overlays rather than here.  See tests/check_plist.sh for where it
+# looks for them.
 plist: all
 	sh ${.CURDIR}/tests/check_plist.sh
 
