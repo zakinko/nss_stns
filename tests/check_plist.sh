@@ -34,7 +34,7 @@ NetBSD)
 	;;
 FreeBSD|DragonFly|MidnightBSD)
 	PREFIX=/usr/local
-	PLIST=$PORTS_OVERLAY/net/nss_stns/pkg-plist
+	PLIST=$PORTS_OVERLAY/nss_stns/pkg-plist
 	OVERLAY_URL=https://github.com/zakinko/ports-zakinko.git
 	OVERLAY_DIR=$PORTS_OVERLAY
 	NSS_VERSION=1

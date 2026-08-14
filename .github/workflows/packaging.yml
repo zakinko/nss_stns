@@ -116,9 +116,14 @@ jobs:
             git clone --depth 1 --single-branch \
               https://git.FreeBSD.org/ports.git /usr/ports
 
-            echo "== dropping the port in =="
-            mkdir -p /usr/ports/net/nss_stns
-            cp "$WORK"/overlay-ports/net/nss_stns/* /usr/ports/net/nss_stns/
+            echo "== dropping the category in =="
+            # zakinko is not one of the categories bsd.port.mk knows, and
+            # check-sanity rejects a CATEGORIES entry it cannot find in that
+            # list.  Adding it is what an administrator does to use the overlay.
+            echo 'VALID_CATEGORIES+=zakinko' >> /etc/make.conf
+            mkdir -p /usr/ports/zakinko
+            (cd "$WORK"/overlay-ports && tar --exclude .git -cf - .) |
+              (cd /usr/ports/zakinko && tar -xf -)
 
             # USE_GITHUB would fetch a release tarball; seed one from the tree
             # under test instead, named the way the framework expects.
@@ -130,7 +135,7 @@ jobs:
               /usr/ports/distfiles/zakinko-nss_stns-v${VERSION}_GH0.tar.gz \
               nss_stns-$VERSION
 
-            cd /usr/ports/net/nss_stns
+            cd /usr/ports/zakinko/nss_stns
             make makesum
             echo "== stage and check the packing list =="
             make stage
@@ -190,9 +195,11 @@ jobs:
 
             # The FreeBSD port is used unchanged: DPorts is a fork of ports,
             # and DragonFly builds from the same branch of the module.
-            echo "== dropping the port in =="
-            mkdir -p /usr/dports/net/nss_stns
-            cp "$WORK"/overlay-ports/net/nss_stns/* /usr/dports/net/nss_stns/
+            echo "== dropping the category in =="
+            echo 'VALID_CATEGORIES+=zakinko' >> /etc/make.conf
+            mkdir -p /usr/dports/zakinko
+            (cd "$WORK"/overlay-ports && tar --exclude .git -cf - .) |
+              (cd /usr/dports/zakinko && tar -xf -)
 
             mkdir -p /usr/distfiles /tmp/dist/nss_stns-$VERSION
             (cd "$WORK" && tar --exclude .git \
@@ -202,7 +209,7 @@ jobs:
               /usr/distfiles/zakinko-nss_stns-v${VERSION}_GH0.tar.gz \
               nss_stns-$VERSION
 
-            cd /usr/dports/net/nss_stns
+            cd /usr/dports/zakinko/nss_stns
             make makesum
             echo "== stage and check the packing list =="
             make stage
