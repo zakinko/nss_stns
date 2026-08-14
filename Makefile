@@ -62,6 +62,23 @@ OBJS=		${MODULE_OBJS} src/stns_key_wrapper.o tests/stns_test.o \
 
 all: ${MODULE} ${KEY_WRAPPER}
 
+# Below "all" and not above it: make takes the first target in the file as
+# the default goal, so writing this at the top quietly turns a bare "make"
+# into "make src/stns_config.o", which builds one object and reports success.
+# Every object depends on the header, and the bundled code on its own.  Without
+# this, a struct that gains a field leaves the objects that were not recompiled
+# using the old layout: not a build error but a program that misbehaves at run
+# time, in whichever field lands on the old offset.  CI never sees it, since CI
+# always builds from nothing; it is the working tree that suffers.
+#
+# One line per object, because a list of targets sharing a dependency does not
+# reliably give it to all of them.
+.for _obj in ${OBJS:Nexternal/*}
+${_obj}: ${.CURDIR}/src/stns.h
+.endfor
+external/mit/parson/parson.o: ${.CURDIR}/external/mit/parson/parson.h
+external/mit/tomlc99/toml.o: ${.CURDIR}/external/mit/tomlc99/toml.h
+
 .SUFFIXES: .c .o
 
 .c.o:
